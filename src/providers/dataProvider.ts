@@ -429,8 +429,9 @@ const convertFileToBase64 = (file: any) =>
 
 export const dataProvider = (type: string, resource: string, params: any) => {
   if (type === "UPDATE" || type === "CREATE") {
-    console.log("run");
     const image = params.data.image;
+    const avatar = params.data.avatar;
+
     return new Promise((resolve) => {
       if (image && image.rawFile) {
         convertFileToBase64(image).then((base64Image: any) => {
@@ -441,12 +442,57 @@ export const dataProvider = (type: string, resource: string, params: any) => {
             })
           );
         });
+      } else if (avatar && avatar.rawFile) {
+        convertFileToBase64(avatar).then((base64Image: any) => {
+          resolve(
+            restProvider(type, resource, {
+              ...params,
+              data: { ...params.data, avatar: base64Image, roles: roles },
+            })
+          );
+        });
+      } else if (resource === "users") {
+        const rolesParam = params.data.roles;
+        var rolesList = rolesParam.split(",");
+        var roles: any = [];
+        if (rolesParam) {
+          roles = rolesList.map((role: any) => role.replace(" ", ""));
+        }
+        resolve(
+          restProvider(type, resource, {
+            ...params,
+            data: { ...params.data, roles: roles },
+          })
+        );
       } else {
         resolve(restProvider(type, resource, params));
       }
     });
   }
-  return new Promise((resolve) =>
-    resolve(restProvider(type, resource, params))
-  );
+
+  return new Promise((resolve) => {
+    if (JSON.stringify(params.filter) === "{}") {
+      resolve(restProvider(type, resource, params));
+    }
+    if (params.hasOwnProperty("filter")) {
+      const filter = params.filter;
+      const newFilter: any = {};
+      for (const key in filter) {
+        if (filter.hasOwnProperty(key)) {
+          if (typeof filter[key] === "string") {
+            newFilter[key] = { ilike: `%${filter[key]}%` };
+          } else {
+            newFilter[key] = filter[key];
+          }
+        }
+      }
+      resolve(
+        restProvider(type, resource, {
+          ...params,
+          filter: newFilter,
+        })
+      );
+    }
+    resolve(restProvider(type, resource, params));
+  });
 };

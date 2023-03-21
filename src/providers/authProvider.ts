@@ -1,39 +1,68 @@
+import _ from "lodash";
 import { AuthProvider } from "react-admin";
-import { API_URL } from "../configs";
+import * as api from "../api";
+import { storage } from "./index";
+
+const login = async (params: any): Promise<boolean> => {
+  try {
+    await api.login(params);
+    return true;
+  } catch (error) {
+    console.log("err", error);
+    throw error;
+  }
+};
+
+const logout = async () => {
+  localStorage.removeItem("auth");
+  return Promise.resolve();
+};
+
+const checkError = (error: any) => {
+  const status = error.status;
+  console.log("status", status);
+  if (status === 401) {
+    storage.remove("auth");
+    return Promise.reject();
+  }
+  if (status === 403) {
+    return Promise.reject({ redirectTo: "/unauthorized", logoutUser: false });
+  }
+  // other error code (404, 500, etc): no need to log out
+  return Promise.resolve();
+};
+
+const checkAuth = (params: any) => {
+  return storage.load("auth") ? Promise.resolve() : Promise.reject();
+};
+
+const getPermissions = (params: any) => {
+  const user = storage.load("auth");
+  const isAdmin = _.get(user, "isAdmin", false);
+  const teams = _.get(user, "teams", {});
+  const team = _.get(user, "team", {});
+  const permissions = {
+    isAdmin,
+    ...teams[0],
+    ...team,
+  };
+  return Promise.resolve(permissions);
+};
+
+const getIdentity = () => {
+  const user = storage.load("auth");
+  const identity = {
+    id: user.id,
+    email: user.email,
+  };
+  return Promise.resolve(identity);
+};
 
 export const authProvider: AuthProvider = {
-  login: ({ username, password }: any) => {
-    console.log(API_URL);
-    const request = new Request(API_URL + "/users/login", {
-      method: "POST",
-      body: JSON.stringify({ email: username, password }),
-      headers: new Headers({ "Content-Type": "application/json" }),
-    });
-    return fetch(request)
-      .then((response) => {
-        if (response.status < 200 || response.status >= 300) {
-          throw new Error(response.statusText);
-        }
-        return response.json();
-      })
-      .then(({ token }) => {
-        localStorage.setItem("token", token);
-      });
-  },
-  logout: () => {
-    localStorage.removeItem("token");
-    return Promise.resolve();
-  },
-  checkError: (error: any) => {
-    const status = error.status;
-    if (status === 401 || status === 403) {
-      localStorage.removeItem("token");
-      return Promise.reject();
-    }
-    return Promise.resolve();
-  },
-  checkAuth: () => {
-    return localStorage.getItem("token") ? Promise.resolve() : Promise.reject();
-  },
-  getPermissions: () => Promise.resolve(),
+  login,
+  logout,
+  checkAuth,
+  checkError,
+  getPermissions,
+  getIdentity,
 };
